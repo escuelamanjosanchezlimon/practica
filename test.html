@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voz Directa</title>
+</head>
+<body>
+    <button id="boton" style="padding:20px; width:100%">INICIAR TRANSCRIPCIÓN</button>
+    <div id="texto" style="margin-top:20px; border:1px solid #000; min-height:200px"></div>
+
+    <script>
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'es-ES';
+        recognition.continuous = true; 
+        recognition.interimResults = true;
+
+        let activo = false;
+
+        recognition.onresult = (event) => {
+            let acumulado = '';
+            for (let i = 0; i < event.results.length; i++) {
+                acumulado += event.results[i][0].transcript;
+            }
+            document.getElementById('texto').innerHTML = acumulado;
+        };
+
+        // ESTO ES CLAVE: Si se detiene solo, se vuelve a prender
+        recognition.onend = () => {
+            if (activo) recognition.start();
+        };
+
+        document.getElementById('boton').onclick = () => {
+            if (!activo) {
+                recognition.start();
+                activo = true;
+                document.getElementById('boton').innerText = "DETENER";
+            } else {
+                activo = false;
+                recognition.stop();
+                document.getElementById('boton').innerText = "INICIAR";
+            }
+        };
+    </script>
+</body>
+</html>
