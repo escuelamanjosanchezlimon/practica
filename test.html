@@ -1,45 +1,116 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voz Directa</title>
 </head>
 <body>
-    <button id="boton" style="padding:20px; width:100%">INICIAR TRANSCRIPCIÓN</button>
-    <div id="texto" style="margin-top:20px; border:1px solid #000; min-height:200px"></div>
+    <h2>Transcripción en Vivo</h2>
+    <button id="btnHablar">🎤 Hablar</button>
+    <button id="btnDetener" disabled>⏹️ Detener</button>
+    <p id="texto" style="border:1px solid #ccc; min-height:100px; padding:10px"></p>
+    <p id="estado" style="color:gray; font-size:12px"></p>
 
     <script>
-        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        recognition.lang = 'es-ES';
-        recognition.continuous = true; 
-        recognition.interimResults = true;
-
+        const btnHablar = document.getElementById('btnHablar');
+        const btnDetener = document.getElementById('btnDetener');
+        const textoEl = document.getElementById('texto');
+        const estadoEl = document.getElementById('estado');
+        
+        let recognition = null;
         let activo = false;
-
-        recognition.onresult = (event) => {
-            let acumulado = '';
-            for (let i = 0; i < event.results.length; i++) {
-                acumulado += event.results[i][0].transcript;
+        
+        // Detectar navegador
+        const navegador = navigator.userAgent;
+        const esChrome = /Chrome/.test(navegador) && !/Edg/.test(navegador);
+        const esSafari = /Safari/.test(navegador) && !/Chrome/.test(navegador);
+        const esFirefox = /Firefox/.test(navegador);
+        
+        estadoEl.innerText = `Navegador: ${esChrome ? 'Chrome ✓' : esSafari ? 'Safari (limitado)' : esFirefox ? 'Firefox (puede fallar)' : 'Desconocido'}`;
+        
+        function iniciarReconocimiento() {
+            // Verificar soporte
+            if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+                estadoEl.innerText = '❌ Tu navegador no soporta reconocimiento de voz. Usa Chrome en Android.';
+                return false;
             }
-            document.getElementById('texto').innerHTML = acumulado;
-        };
-
-        // ESTO ES CLAVE: Si se detiene solo, se vuelve a prender
-        recognition.onend = () => {
-            if (activo) recognition.start();
-        };
-
-        document.getElementById('boton').onclick = () => {
-            if (!activo) {
-                recognition.start();
+            
+            // En iOS/Safari, continuous no funciona bien
+            const usarContinuo = !esSafari;
+            
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'es-ES';
+            recognition.continuous = usarContinuo;  // Safari no soporta continuous=true
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            
+            // Manejadores
+            recognition.onstart = () => {
                 activo = true;
-                document.getElementById('boton').innerText = "DETENER";
-            } else {
-                activo = false;
-                recognition.stop();
-                document.getElementById('boton').innerText = "INICIAR";
+                btnHablar.disabled = true;
+                btnDetener.disabled = false;
+                estadoEl.innerText = '🎤 Escuchando... Habla ahora';
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Error:', event.error);
+                let mensaje = '';
+                switch(event.error) {
+                    case 'not-allowed':
+                        mensaje = '❌ Permiso denegado. Verifica: 1) HTTPS 2) Permisos del sitio 3) No estés en incógnito';
+                        break;
+                    case 'no-speech':
+                        mensaje = '⏳ No se detectó voz. ¿Micrófono funcionando?';
+                        break;
+                    case 'audio-capture':
+                        mensaje = '❌ No se encontró micrófono. Conecta uno e intenta de nuevo.';
+                        break;
+                    case 'network':
+                        mensaje = '❌ Error de red. ¿Tienes internet?';
+                        break;
+                    default:
+                        mensaje = `Error: ${event.error}`;
+                }
+                estadoEl.innerText = mensaje;
+                detenerReconocimiento();
+            };
+            
+            recognition.onend = () => {
+                detenerReconocimiento();
+                estadoEl.innerText = '⏹️ Detenido. Presiona "Hablar" para empezar de nuevo.';
+            };
+            
+            recognition.onresult = (event) => {
+                let textoFinal = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    textoFinal += event.results[i][0].transcript;
+                }
+                textoEl.innerText = textoFinal;
+                estadoEl.innerText = '🎤 Escuchando...';
+            };
+            
+            try {
+                recognition.start();
+                return true;
+            } catch(e) {
+                estadoEl.innerText = '❌ Error al iniciar: ' + e.message;
+                return false;
             }
-        };
+        }
+        
+        function detenerReconocimiento() {
+            if (recognition && activo) {
+                try {
+                    recognition.stop();
+                } catch(e) {}
+            }
+            activo = false;
+            btnHablar.disabled = false;
+            btnDetener.disabled = true;
+            recognition = null;
+        }
+        
+        btnHablar.onclick = () => iniciarReconocimiento();
+        btnDetener.onclick = () => detenerReconocimiento();
     </script>
 </body>
 </html>
