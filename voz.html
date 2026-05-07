@@ -1,70 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Debugger</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        #result { border: 1px solid #ccc; min-height: 100px; padding: 10px; margin: 15px 0; border-radius: 8px; background: #fff; }
+        button { width: 100%; padding: 15px; border: none; border-radius: 8px; background: #007bff; color: white; font-weight: bold; font-size: 16px; }
+        .listening { background: #dc3545; }
+        /* Consola de errores para ver en el móvil */
+        #debugLog { margin-top: 20px; font-size: 12px; color: #666; background: #eee; padding: 10px; border-radius: 5px; max-height: 100px; overflow-y: auto; }
+    </style>
+</head>
 <body>
 
-<div class="container">
-    <h2>Dictado por Voz</h2>
-    <div id="status">Presiona el botón para hablar</div>
-    <div id="result" placeholder="La transcripción aparecerá aquí..."></div>
-    <button id="btnStart">Iniciar Micrófono</button>
+<div class="card">
+    <h3>Transcripción Pro</h3>
+    <div id="status">Estado: Listo</div>
+    <div id="result" contenteditable="true"></div>
+    <button id="btn">Iniciar Micrófono</button>
+    
+    <div id="debugLog">Logs del sistema...</div>
 </div>
 
 <script>
-    // 1. Manejo de compatibilidad (Fallbacks)
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const btn = document.getElementById('btnStart');
+    const btn = document.getElementById('btn');
     const resultDiv = document.getElementById('result');
     const statusDiv = document.getElementById('status');
+    const debugLog = document.getElementById('debugLog');
 
-    if (!SpeechRecognition) {
-        statusDiv.innerText = "❌ Tu navegador no soporta transcripción";
-        btn.disabled = true;
-    } else {
-        const recognition = new SpeechRecognition();
+    let recognition = null;
 
-        // 2. Configuración
-        recognition.lang = 'es-ES';
-        recognition.continuous = false; // Cambiar a true si quieres que no pare al hacer pausas
-        recognition.interimResults = false; // Solo mostrar resultados finales
+    function log(msg) {
+        debugLog.innerHTML += `<br>> ${msg}`;
+        console.log(msg);
+    }
 
-        // 3. Eventos
-        recognition.onstart = () => {
-            statusDiv.innerText = "🎤 Escuchando...";
-            btn.innerText = "Detener";
-            btn.classList.add('listening');
-        };
-
-        recognition.onspeechend = () => {
-            statusDiv.innerText = "⌛ Procesando...";
-            recognition.stop();
-        };
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            resultDiv.innerText = transcript;
-            statusDiv.innerText = "✅ Transcripción completa";
-            resetBtn();
-        };
-
-        recognition.onerror = (event) => {
-            console.error(event.error);
-            statusDiv.innerText = "❌ Error: " + event.error;
-            resetBtn();
-        };
-
-        recognition.onend = () => {
-            resetBtn();
-        };
-
-        function resetBtn() {
-            btn.innerText = "Iniciar Micrófono";
-            btn.classList.remove('listening');
+    function initRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            log("Error: Navegador no soporta SpeechRecognition");
+            statusDiv.innerText = "Navegador no compatible";
+            return null;
         }
 
-        // 4. Activación por interacción de usuario (Obligatorio en móvil)
-        btn.addEventListener('click', () => {
+        const rec = new SpeechRecognition();
+        rec.lang = 'es-ES';
+        rec.continuous = true;
+        rec.interimResults = true;
+
+        rec.onstart = () => {
+            log("Evento: onstart");
+            statusDiv.innerText = "Estado: Escuchando...";
+            btn.classList.add('listening');
+            btn.innerText = "Detener";
+        };
+
+        rec.onresult = (event) => {
+            let final = "";
+            for (let i = 0; i < event.results.length; i++) {
+                final += event.results[i][0].transcript;
+            }
+            resultDiv.innerText = final;
+        };
+
+        rec.onerror = (e) => {
+            log("Error de API: " + e.error);
+            statusDiv.innerText = "Error: " + e.error;
+            stopUI();
+        };
+
+        rec.onend = () => {
+            log("Evento: onend (se detuvo)");
+            stopUI();
+        };
+
+        return rec;
+    }
+
+    function stopUI() {
+        btn.classList.remove('listening');
+        btn.innerText = "Iniciar Micrófono";
+    }
+
+    btn.addEventListener('click', () => {
+        if (btn.classList.contains('listening')) {
+            log("Botón: Deteniendo...");
+            recognition.stop();
+        } else {
+            log("Botón: Iniciando...");
+            if (!recognition) recognition = initRecognition();
+            
             try {
-                // Si ya está escuchando, lo detenemos manualmente
-                if (btn.classList.contains('listening')) {
-                    recognition.stop();
-                } else {
-                    recognition.start();
-                }
+                recognition.start();
+            } catch (e) {
+                log("Excepción al iniciar: " + e.message);
+                // Si falla por estar ya iniciado, lo recreamos
+                recognition = initRecognition();
+                recognition.start();
+            }
+        }
+    });
+</script>
+</body>
+</html>
