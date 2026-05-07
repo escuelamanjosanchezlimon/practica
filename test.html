@@ -3,64 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grabadora Nativa JS</title>
+    <title>Grabador y Transcriptor JS</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 50px; }
-        .controls { margin-bottom: 20px; }
-        button { padding: 10px 20px; cursor: pointer; margin: 0 5px; }
-        #status { color: red; font-weight: bold; margin-bottom: 10px; visibility: hidden; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 30px; background-color: #f0f2f5; }
+        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
+        button { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 8px; transition: 0.3s; margin: 10px; }
+        #btnEscuchar { background-color: #4CAF50; color: white; }
+        #btnEscuchar:disabled { background-color: #ccc; }
+        #btnDetener { background-color: #f44336; color: white; }
+        #textoFinal { width: 100%; height: 150px; margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-size: 1.1rem; }
+        .status { font-weight: bold; color: #555; margin: 10px 0; }
+        .badge { background: #007bff; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; }
     </style>
 </head>
 <body>
 
-    <h2>Grabadora de Voz</h2>
-    
-    <div id="status">🔴 Grabando...</div>
+    <div class="container">
+        <h2>Transcriptor en Tiempo Real</h2>
+        <p>Idioma detectado: <span class="badge" id="langBadge">Detectando...</span></p>
+        
+        <div class="status" id="estado">Presiona el botón para hablar</div>
 
-    <div class="controls">
-        <button id="btnIniciar">Iniciar Grabación</button>
-        <button id="btnDetener" disabled>Detener</button>
+        <button id="btnEscuchar">🎤 Empezar a hablar</button>
+        <button id="btnDetener" disabled>🛑 Detener</button>
+
+        <textarea id="textoFinal" placeholder="Tu texto aparecerá aquí..."></textarea>
     </div>
 
-    <h3>Última grabación:</h3>
-    <audio id="reproductor" controls></audio>
-
     <script>
-        let mediaRecorder;
-        let audioChunks = [];
-
-        const btnIniciar = document.getElementById('btnIniciar');
+        const btnEscuchar = document.getElementById('btnEscuchar');
         const btnDetener = document.getElementById('btnDetener');
-        const status = document.getElementById('status');
-        const reproductor = document.getElementById('reproductor');
+        const textoFinal = document.getElementById('textoFinal');
+        const estado = document.getElementById('estado');
+        const langBadge = document.getElementById('langBadge');
 
-        btnIniciar.onclick = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+        // 1. Detectar idioma del navegador
+        const userLang = navigator.language || 'es-ES';
+        langBadge.innerText = userLang;
+
+        // 2. Verificar soporte de SpeechRecognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            estado.innerText = "❌ Tu navegador no soporta transcripción.";
+            btnEscuchar.disabled = true;
+        } else {
+            const recognition = new SpeechRecognition();
             
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
+            // Configuración
+            recognition.lang = userLang;
+            recognition.continuous = true; // No para hasta que tú digas
+            recognition.interimResults = true; // Muestra resultados parciales
+
+            // Evento cuando hay resultados
+            recognition.onresult = (event) => {
+                let textoAcumulado = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    textoAcumulado += event.results[i][0].transcript;
+                }
+                textoFinal.value = textoAcumulado;
             };
 
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                reproductor.src = audioUrl;
-                audioChunks = [];
+            recognition.onstart = () => {
+                estado.innerText = "Listening... (Escuchando)";
+                estado.style.color = "red";
             };
 
-            mediaRecorder.start();
-            btnIniciar.disabled = true;
-            btnDetener.disabled = false;
-            status.style.visibility = 'visible';
-        };
+            recognition.onend = () => {
+                estado.innerText = "Transcripción finalizada.";
+                estado.style.color = "#555";
+                btnEscuchar.disabled = false;
+                btnDetener.disabled = true;
+            };
 
-        btnDetener.onclick = () => {
-            mediaRecorder.stop();
-            btnIniciar.disabled = false;
-            btnDetener.disabled = true;
-            status.style.visibility = 'hidden';
-        };
+            recognition.onerror = (event) => {
+                estado.innerText = "Error: " + event.error;
+                console.error(event.error);
+            };
+
+            // Botones
+            btnEscuchar.onclick = () => {
+                textoFinal.value = "";
+                recognition.start();
+                btnEscuchar.disabled = true;
+                btnDetener.disabled = false;
+            };
+
+            btnDetener.onclick = () => {
+                recognition.stop();
+            };
+        }
     </script>
 </body>
 </html>
