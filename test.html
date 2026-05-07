@@ -1,116 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabadora Nativa JS</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 50px; }
+        .controls { margin-bottom: 20px; }
+        button { padding: 10px 20px; cursor: pointer; margin: 0 5px; }
+        #status { color: red; font-weight: bold; margin-bottom: 10px; visibility: hidden; }
+    </style>
 </head>
 <body>
-    <h2>Transcripción en Vivo</h2>
-    <button id="btnHablar">🎤 Hablar</button>
-    <button id="btnDetener" disabled>⏹️ Detener</button>
-    <p id="texto" style="border:1px solid #ccc; min-height:100px; padding:10px"></p>
-    <p id="estado" style="color:gray; font-size:12px"></p>
+
+    <h2>Grabadora de Voz</h2>
+    
+    <div id="status">🔴 Grabando...</div>
+
+    <div class="controls">
+        <button id="btnIniciar">Iniciar Grabación</button>
+        <button id="btnDetener" disabled>Detener</button>
+    </div>
+
+    <h3>Última grabación:</h3>
+    <audio id="reproductor" controls></audio>
 
     <script>
-        const btnHablar = document.getElementById('btnHablar');
+        let mediaRecorder;
+        let audioChunks = [];
+
+        const btnIniciar = document.getElementById('btnIniciar');
         const btnDetener = document.getElementById('btnDetener');
-        const textoEl = document.getElementById('texto');
-        const estadoEl = document.getElementById('estado');
-        
-        let recognition = null;
-        let activo = false;
-        
-        // Detectar navegador
-        const navegador = navigator.userAgent;
-        const esChrome = /Chrome/.test(navegador) && !/Edg/.test(navegador);
-        const esSafari = /Safari/.test(navegador) && !/Chrome/.test(navegador);
-        const esFirefox = /Firefox/.test(navegador);
-        
-        estadoEl.innerText = `Navegador: ${esChrome ? 'Chrome ✓' : esSafari ? 'Safari (limitado)' : esFirefox ? 'Firefox (puede fallar)' : 'Desconocido'}`;
-        
-        function iniciarReconocimiento() {
-            // Verificar soporte
-            if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
-                estadoEl.innerText = '❌ Tu navegador no soporta reconocimiento de voz. Usa Chrome en Android.';
-                return false;
-            }
+        const status = document.getElementById('status');
+        const reproductor = document.getElementById('reproductor');
+
+        btnIniciar.onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
             
-            // En iOS/Safari, continuous no funciona bien
-            const usarContinuo = !esSafari;
-            
-            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = 'es-ES';
-            recognition.continuous = usarContinuo;  // Safari no soporta continuous=true
-            recognition.interimResults = true;
-            recognition.maxAlternatives = 1;
-            
-            // Manejadores
-            recognition.onstart = () => {
-                activo = true;
-                btnHablar.disabled = true;
-                btnDetener.disabled = false;
-                estadoEl.innerText = '🎤 Escuchando... Habla ahora';
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
             };
-            
-            recognition.onerror = (event) => {
-                console.error('Error:', event.error);
-                let mensaje = '';
-                switch(event.error) {
-                    case 'not-allowed':
-                        mensaje = '❌ Permiso denegado. Verifica: 1) HTTPS 2) Permisos del sitio 3) No estés en incógnito';
-                        break;
-                    case 'no-speech':
-                        mensaje = '⏳ No se detectó voz. ¿Micrófono funcionando?';
-                        break;
-                    case 'audio-capture':
-                        mensaje = '❌ No se encontró micrófono. Conecta uno e intenta de nuevo.';
-                        break;
-                    case 'network':
-                        mensaje = '❌ Error de red. ¿Tienes internet?';
-                        break;
-                    default:
-                        mensaje = `Error: ${event.error}`;
-                }
-                estadoEl.innerText = mensaje;
-                detenerReconocimiento();
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                reproductor.src = audioUrl;
+                audioChunks = [];
             };
-            
-            recognition.onend = () => {
-                detenerReconocimiento();
-                estadoEl.innerText = '⏹️ Detenido. Presiona "Hablar" para empezar de nuevo.';
-            };
-            
-            recognition.onresult = (event) => {
-                let textoFinal = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    textoFinal += event.results[i][0].transcript;
-                }
-                textoEl.innerText = textoFinal;
-                estadoEl.innerText = '🎤 Escuchando...';
-            };
-            
-            try {
-                recognition.start();
-                return true;
-            } catch(e) {
-                estadoEl.innerText = '❌ Error al iniciar: ' + e.message;
-                return false;
-            }
-        }
-        
-        function detenerReconocimiento() {
-            if (recognition && activo) {
-                try {
-                    recognition.stop();
-                } catch(e) {}
-            }
-            activo = false;
-            btnHablar.disabled = false;
+
+            mediaRecorder.start();
+            btnIniciar.disabled = true;
+            btnDetener.disabled = false;
+            status.style.visibility = 'visible';
+        };
+
+        btnDetener.onclick = () => {
+            mediaRecorder.stop();
+            btnIniciar.disabled = false;
             btnDetener.disabled = true;
-            recognition = null;
-        }
-        
-        btnHablar.onclick = () => iniciarReconocimiento();
-        btnDetener.onclick = () => detenerReconocimiento();
+            status.style.visibility = 'hidden';
+        };
     </script>
 </body>
 </html>
