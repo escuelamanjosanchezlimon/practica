@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcripción de Voz</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        .container {
+            width: 90%;
+            max-width: 500px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        #status {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        #result {
+            width: 100%;
+            height: 150px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+            box-sizing: border-box;
+            background: #fafafa;
+            overflow-y: auto;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+        button:active {
+            transform: scale(0.98);
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+        }
+        .listening {
+            background-color: #dc3545 !important;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Dictado por Voz</h2>
+    <div id="status">Presiona el botón para hablar</div>
+    <div id="result" placeholder="La transcripción aparecerá aquí..."></div>
+    <button id="btnStart">Iniciar Micrófono</button>
+</div>
+
+<script>
+    // 1. Manejo de compatibilidad (Fallbacks)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const btn = document.getElementById('btnStart');
+    const resultDiv = document.getElementById('result');
+    const statusDiv = document.getElementById('status');
+
+    if (!SpeechRecognition) {
+        statusDiv.innerText = "❌ Tu navegador no soporta transcripción";
+        btn.disabled = true;
+    } else {
+        const recognition = new SpeechRecognition();
+
+        // 2. Configuración
+        recognition.lang = 'es-ES';
+        recognition.continuous = false; // Cambiar a true si quieres que no pare al hacer pausas
+        recognition.interimResults = false; // Solo mostrar resultados finales
+
+        // 3. Eventos
+        recognition.onstart = () => {
+            statusDiv.innerText = "🎤 Escuchando...";
+            btn.innerText = "Detener";
+            btn.classList.add('listening');
+        };
+
+        recognition.onspeechend = () => {
+            statusDiv.innerText = "⌛ Procesando...";
+            recognition.stop();
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            resultDiv.innerText = transcript;
+            statusDiv.innerText = "✅ Transcripción completa";
+            resetBtn();
+        };
+
+        recognition.onerror = (event) => {
+            console.error(event.error);
+            statusDiv.innerText = "❌ Error: " + event.error;
+            resetBtn();
+        };
+
+        recognition.onend = () => {
+            resetBtn();
+        };
+
+        function resetBtn() {
+            btn.innerText = "Iniciar Micrófono";
+            btn.classList.remove('listening');
+        }
+
+        // 4. Activación por interacción de usuario (Obligatorio en móvil)
+        btn.addEventListener('click', () => {
+            try {
+                // Si ya está escuchando, lo detenemos manualmente
+                if (btn.classList.contains('listening')) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            } catch (e) {
+                console.log("Error al iniciar:", e);
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
