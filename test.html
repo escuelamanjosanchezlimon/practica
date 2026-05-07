@@ -3,95 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grabador y Transcriptor JS</title>
+    <title>Debug Grabador y Transcriptor</title>
+    <!-- 1. Consola flotante para móvil (Eruda) -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 30px; background-color: #f0f2f5; }
-        .container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
-        button { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 8px; transition: 0.3s; margin: 10px; }
-        #btnEscuchar { background-color: #4CAF50; color: white; }
-        #btnEscuchar:disabled { background-color: #ccc; }
-        #btnDetener { background-color: #f44336; color: white; }
-        #textoFinal { width: 100%; height: 150px; margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-size: 1.1rem; }
-        .status { font-weight: bold; color: #555; margin: 10px 0; }
-        .badge { background: #007bff; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        button { 
+            width: 100%; padding: 15px; margin: 10px 0; border: none; 
+            border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold;
+        }
+        #startBtn { background: #28a745; color: white; }
+        #stopBtn { background: #dc3545; color: white; }
+        #log { 
+            background: #222; color: #00ff00; padding: 10px; 
+            font-family: monospace; font-size: 12px; border-radius: 5px;
+            height: 100px; overflow-y: auto; margin-top: 10px;
+        }
+        textarea { width: 100%; height: 150px; margin-top: 10px; border: 1px solid #ccc; border-radius: 5px; padding: 10px; box-sizing: border-box; }
+        .label { font-size: 12px; color: #666; text-transform: uppercase; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>Transcriptor en Tiempo Real</h2>
-        <p>Idioma detectado: <span class="badge" id="langBadge">Detectando...</span></p>
+    <div class="card">
+        <h3>Transcriptor & Debug</h3>
         
-        <div class="status" id="estado">Presiona el botón para hablar</div>
+        <div class="label">Estado del sistema:</div>
+        <div id="log">Esperando interacción...</div>
 
-        <button id="btnEscuchar">🎤 Empezar a hablar</button>
-        <button id="btnDetener" disabled>🛑 Detener</button>
+        <button id="startBtn">🎤 INICIAR TRANSCRIPCIÓN</button>
+        <button id="stopBtn" disabled>🛑 DETENER</button>
 
-        <textarea id="textoFinal" placeholder="Tu texto aparecerá aquí..."></textarea>
+        <div class="label">Texto reconocido:</div>
+        <textarea id="resultText" placeholder="Aquí aparecerá lo que digas..."></textarea>
     </div>
 
     <script>
-        const btnEscuchar = document.getElementById('btnEscuchar');
-        const btnDetener = document.getElementById('btnDetener');
-        const textoFinal = document.getElementById('textoFinal');
-        const estado = document.getElementById('estado');
-        const langBadge = document.getElementById('langBadge');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resultText = document.getElementById('resultText');
+        const logElement = document.getElementById('log');
 
-        // 1. Detectar idioma del navegador
-        const userLang = navigator.language || 'es-ES';
-        langBadge.innerText = userLang;
+        // Función para escribir logs en la pantalla del celular
+        function customLog(msg, isError = false) {
+            const time = new Date().toLocaleTimeString();
+            const color = isError ? 'red' : '#00ff00';
+            logElement.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(msg);
+        }
 
-        // 2. Verificar soporte de SpeechRecognition
+        // Captura errores globales
+        window.onerror = (m) => customLog("Global Error: " + m, true);
+        window.onunhandledrejection = (e) => customLog("Promise Error: " + e.reason, true);
+
+        // Configuración de la API
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
-            estado.innerText = "❌ Tu navegador no soporta transcripción.";
-            btnEscuchar.disabled = true;
+            customLog("API no soportada en este navegador", true);
+            startBtn.disabled = true;
         } else {
             const recognition = new SpeechRecognition();
-            
-            // Configuración
-            recognition.lang = userLang;
-            recognition.continuous = true; // No para hasta que tú digas
-            recognition.interimResults = true; // Muestra resultados parciales
-
-            // Evento cuando hay resultados
-            recognition.onresult = (event) => {
-                let textoAcumulado = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    textoAcumulado += event.results[i][0].transcript;
-                }
-                textoFinal.value = textoAcumulado;
-            };
+            recognition.lang = navigator.language || 'es-ES';
+            recognition.continuous = true;
+            recognition.interimResults = true;
 
             recognition.onstart = () => {
-                estado.innerText = "Listening... (Escuchando)";
-                estado.style.color = "red";
+                customLog("Micro activado. ¡Habla ahora!");
             };
 
-            recognition.onend = () => {
-                estado.innerText = "Transcripción finalizada.";
-                estado.style.color = "#555";
-                btnEscuchar.disabled = false;
-                btnDetener.disabled = true;
+            recognition.onresult = (event) => {
+                let current = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    current += event.results[i][0].transcript;
+                }
+                resultText.value = current;
             };
 
             recognition.onerror = (event) => {
-                estado.innerText = "Error: " + event.error;
-                console.error(event.error);
+                customLog("Error de API: " + event.error, true);
+                if (event.error === 'not-allowed') {
+                    customLog("CONSEJO: Verifica que estés en HTTPS y que el permiso no esté bloqueado.", true);
+                }
             };
 
-            // Botones
-            btnEscuchar.onclick = () => {
-                textoFinal.value = "";
-                recognition.start();
-                btnEscuchar.disabled = true;
-                btnDetener.disabled = false;
+            recognition.onend = () => {
+                customLog("Reconocimiento finalizado.");
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
             };
 
-            btnDetener.onclick = () => {
+            startBtn.onclick = () => {
+                try {
+                    recognition.start();
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    resultText.value = "";
+                } catch (e) {
+                    customLog("Error al iniciar: " + e.message, true);
+                }
+            };
+
+            stopBtn.onclick = () => {
                 recognition.stop();
             };
+        }
+
+        customLog("Sistema listo. Navegador: " + navigator.userAgent.substring(0, 30) + "...");
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            customLog("ADVERTENCIA: No estás en HTTPS. Es probable que falle.", true);
         }
     </script>
 </body>
